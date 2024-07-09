@@ -1,0 +1,21 @@
+{
+    "name": "yangweijie/think-orm-dm",
+    "description": "dm database for think-orm",
+    "type": "library",
+    "require": {
+        "topthink/think-orm": "^2.0|^3.0"
+    },
+    "license": "Apache-2.0",
+    "autoload": {
+        "psr-4": {
+            "think\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "yangweijie",
+            "email": "917647288@qq.com"
+        }
+    ],
+    "minimum-stability": "dev"
+}
