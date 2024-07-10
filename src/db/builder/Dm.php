@@ -226,13 +226,14 @@ class Dm extends Builder
         $all_tables = $this->getConnection()->getTables();
         foreach ((array) $tables as $key => $table) {
             $is_alias = !in_array($table, $all_tables);
+            $old_table = $table;
             $table = $table instanceof Raw? $table: ($is_alias? $table: "`{$database}`.".$table);
-            if ($table instanceof Raw) {
+            if ($old_table instanceof Raw) {
                 $item[] = $this->parseRaw($query, $table);
             } elseif (!is_numeric($key)) {
                 $item[] = $this->parseKey($query, $key) . ' ' . $this->parseKey($query, $table);
-            } elseif (isset($options['alias'][$table])) {
-                $item[] = $this->parseKey($query, $table) . ' ' . $this->parseKey($query, $options['alias'][$table]);
+            } elseif (isset($options['alias'][$old_table])) {
+                $item[] = $this->parseKey($query, $table) . ' ' . $this->parseKey($query, $options['alias'][$old_table]);
             } else {
                 $item[] = $this->parseKey($query, $table);
             }

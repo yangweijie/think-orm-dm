@@ -5,6 +5,7 @@ namespace think\db;
 use think\db\Fetch;
 use think\db\Raw;
 use PDOStatement;
+use think\helper\Str;
 
 class Dm extends Query
 {
@@ -528,5 +529,21 @@ class Dm extends Query
         $this->options['join'][] = [$table, strtoupper($type), $condition];
 
         return $this;
+    }
+
+    /**
+     * 得到当前或者指定名称的数据表
+     * @access public
+     * @param string $name 不含前缀的数据表名字
+     * @return mixed
+     */
+    public function getTable(string $name = '')
+    {
+        if (empty($name) && isset($this->options['table'])) {
+            return $this->options['table'];
+        }
+
+        $name = $name ?: $this->name;
+        return $this->prefix . $name;
     }
 }
