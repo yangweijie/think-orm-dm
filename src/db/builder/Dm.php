@@ -3,6 +3,7 @@
 namespace think\db\builder;
 
 use think\db\Builder;
+use think\db\exception\DbException as Exception;
 use think\db\Expression;
 use think\db\Query;
 use think\db\Raw;
@@ -21,32 +22,7 @@ class Dm extends Builder
         return $connect->getConfig()['database'];
     }
 
-    /**
-     * table分析
-     * @access protected
-     * @param  Query     $query     查询对象
-     * @param  mixed     $tables    表名
-     * @return string
-     */
-    protected function parseTable(Query $query, $tables): string
-    {
-        $database = $this->getDatabase();
-        $item    = [];
-        $options = $query->getOptions();
-        foreach ((array) $tables as $key => $table) {
-            if ($table instanceof Raw) {
-                $item[] = $this->parseRaw($query, "`$database`.$table");
-            } elseif (!is_numeric($key)) {
-                $item[] = $this->parseKey($query, $key) . ' ' . $this->parseKey($query, "`$database`.$table");
-            } elseif (isset($options['alias'][$table])) {
-                $item[] = $this->parseKey($query, "`$database`.$table") . ' ' . $this->parseKey($query, $options['alias'][$table]);
-            } else {
-                $item[] = $this->parseKey($query, "`$database`.$table");
-            }
-        }
 
-        return implode(',', $item);
-    }
 
     /**
      * order分析
@@ -134,5 +110,134 @@ class Dm extends Builder
     protected function parseRand(Query $query) :string
     {
         return 'RAND()';
+    }
+
+    protected function parseData(Query $query, array $data = [], array $fields = [], array $bind = []): array
+    {
+        if (empty($data)) {
+            return [];
+        }
+
+        $options = $query->getOptions();
+
+        // 获取绑定信息
+        if (empty($bind)) {
+            $bind = $query->getFieldsBindType();
+        }
+
+        if (empty($fields)) {
+            if (empty($options['field']) || '*' == $options['field']) {
+                $fields = array_keys($bind);
+            } else {
+                $fields = $options['field'];
+            }
+        }
+
+        $result = [];
+
+        foreach ($data as $key => $val) {
+            $item = $this->parseKey($query, $key, true);
+
+            if ($val instanceof Raw) {
+                $result[$item] = $this->parseRaw($query, $val);
+                continue;
+            } elseif (!is_scalar($val) && (in_array($key, (array) $query->getOptions('json')) || 'json' == $query->getFieldType($key))) {
+                $val = json_encode($val);
+            }
+
+            if (false !== strpos($key, '->')) {
+                [$key, $name]  = explode('->', $key, 2);
+                $item          = $this->parseKey($query, $key);
+
+                $result[$item . '->' . $name] = 'json_set(' . $item . ', \'$.' . $name . '\', ' . $this->parseDataBind($query, $key . '->' . $name, $val, $bind) . ')';
+            } elseif (false === strpos($key, '.') && !in_array($key, $fields, true)) {
+                if ($options['strict']) {
+                    throw new Exception('fields not exists:[' . $key . ']');
+                }
+            } elseif (is_null($val)) {
+                $result[$item] = 'NULL';
+            } elseif (is_array($val) && !empty($val) && is_string($val[0])) {
+                switch (strtoupper($val[0])) {
+                    case 'INC':
+                        $result[$item] = $item . ' + ' . floatval($val[1]);
+                        break;
+                    case 'DEC':
+                        $result[$item] = $item . ' - ' . floatval($val[1]);
+                        break;
+                }
+            } elseif (is_scalar($val)) {
+                // 过滤非标量数据
+                if (!$query->isAutoBind() && PDO::PARAM_STR == $bind[$key]) {
+                    $val = '\'' . $val . '\'';
+                }
+
+                $result[$item] = !$query->isAutoBind() ? $val : $this->parseDataBind($query, $key, $val, $bind);
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * 分析Raw对象
+     *
+     * @param \think\db\BaseQuery $query 查询对象
+     * @param Raw   $raw   Raw对象
+     *
+     * @return string
+     */
+    protected function parseRaw(Query $query, Raw $raw): string
+    {
+        $sql    = $raw->getValue();
+        $bind   = $raw->getBind();
+
+        if(stripos($sql, '"') === false && stripos($sql, "'") === false) {
+            $tableName = $query->getTable();
+            $tableFields = $query->getTableFields($tableName);
+            $sql_arr = implode(' ', $tableFields);
+            foreach ($tableFields as $field){
+                if(in_array($field, $sql_arr)){
+                    $sql_arr[array_search($sql_arr, $field)] = "`{$field}`";
+                }
+            }
+            $sql = implode(' ', $sql_arr);
+        }
+        $sql = str_ireplace(['group_concat'], ['wm_concat'], $sql);
+        if ($bind) {
+            $query->bindParams($sql, $bind);
+        }
+
+        return $sql;
+    }
+
+    /**
+     * table分析
+     * @access protected
+     * @param  Query     $query     查询对象
+     * @param  mixed     $tables    表名
+     * @return string
+     */
+    protected function parseTable(Query $query, $tables): string
+    {
+        $item    = [];
+        $options = $query->getOptions();
+        $database = $this->getDatabase();
+//        "`{$database}`.".
+        $all_tables = $this->getConnection()->getTables();
+        foreach ((array) $tables as $key => $table) {
+            $is_alias = !in_array($table, $all_tables);
+            $table = $table instanceof Raw? $table: ($is_alias? $table: "`{$database}`.".$table);
+            if ($table instanceof Raw) {
+                $item[] = $this->parseRaw($query, $table);
+            } elseif (!is_numeric($key)) {
+                $item[] = $this->parseKey($query, $key) . ' ' . $this->parseKey($query, $table);
+            } elseif (isset($options['alias'][$table])) {
+                $item[] = $this->parseKey($query, $table) . ' ' . $this->parseKey($query, $options['alias'][$table]);
+            } else {
+                $item[] = $this->parseKey($query, $table);
+            }
+        }
+
+        return implode(',', $item);
     }
 }

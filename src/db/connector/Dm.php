@@ -10,7 +10,10 @@
 namespace think\db\connector;
 
 use PDO;
+use think\db\exception\PDOException;
 use think\db\PDOConnection;
+use think\db\Query;
+use think\db\Raw;
 use think\Exception;
 
 /**
@@ -18,6 +21,55 @@ use think\Exception;
  */
 class Dm extends PDOConnection
 {
+
+    protected $config = [
+        // 数据库类型
+        'type'            => '',
+        // 服务器地址
+        'hostname'        => '',
+        // 数据库名
+        'database'        => '',
+        // 用户名
+        'username'        => '',
+        // 密码
+        'password'        => '',
+        // 端口
+        'hostport'        => '',
+        // 连接dsn
+        'dsn'             => '',
+        // 数据库连接参数
+        'params'          => [],
+        // 数据库编码默认采用utf8
+        'charset'         => 'utf8',
+        // 数据库表前缀
+        'prefix'          => '',
+        // 数据库部署方式:0 集中式(单一服务器),1 分布式(主从服务器)
+        'deploy'          => 0,
+        // 数据库读写是否分离 主从式有效
+        'rw_separate'     => false,
+        // 读写分离后 主服务器数量
+        'master_num'      => 1,
+        // 指定从服务器序号
+        'slave_no'        => '',
+        // 模型写入后自动读取主服务器
+        'read_master'     => false,
+        // 是否严格检查字段是否存在
+        'fields_strict'   => true,
+        // 开启字段缓存
+        'fields_cache'    => false,
+        // 监听SQL
+        'trigger_sql'     => true,
+        // Builder类
+        'builder'         => '',
+        // Query类
+        'query'           => 'think\db\Dm',
+        // 是否需要断线重连
+        'break_reconnect' => false,
+        // 断线标识字符串
+        'break_match_str' => [],
+        // 自动参数绑定
+        'auto_param_bind' => true,
+    ];
 
     /**
      * 默认PDO连接参数
@@ -43,6 +95,7 @@ class Dm extends PDOConnection
         if (!empty($config['hostport'])) {
             $dsn .= ':' . $config['hostport'];
         }
+        $dsn .= ';dbname=' . $config['database'];
         return $dsn;
     }
 
@@ -80,6 +133,81 @@ class Dm extends PDOConnection
         }
     }
 
+
+    /**
+     * 数据分析
+     * @access protected
+     * @param  Query $query     查询对象
+     * @param  array $data      数据
+     * @param  array $fields    字段信息
+     * @param  array $bind      参数绑定
+     * @return array
+     */
+    protected function parseData(Query $query, array $data = [], array $fields = [], array $bind = []): array
+    {
+        if (empty($data)) {
+            return [];
+        }
+
+        $options = $query->getOptions();
+
+        // 获取绑定信息
+        if (empty($bind)) {
+            $bind = $query->getFieldsBindType();
+        }
+
+        if (empty($fields)) {
+            if (empty($options['field']) || '*' == $options['field']) {
+                $fields = array_keys($bind);
+            } else {
+                $fields = $options['field'];
+            }
+        }
+
+        $result = [];
+
+        foreach ($data as $key => $val) {
+            $item = $this->parseKey($query, $key, true);
+            if ($val instanceof Raw) {
+                $result[$item] = $this->parseRaw($query, $val);
+                continue;
+            } elseif (!is_scalar($val) && (in_array($key, (array) $query->getOptions('json')) || 'json' == $query->getFieldType($key))) {
+                $val = json_encode($val);
+            }
+
+            if (false !== strpos($key, '->')) {
+                [$key, $name]  = explode('->', $key, 2);
+                $item          = $this->parseKey($query, $key);
+
+                $result[$item . '->' . $name] = 'json_set(' . $item . ', \'$.' . $name . '\', ' . $this->parseDataBind($query, $key . '->' . $name, $val, $bind) . ')';
+            } elseif (false === strpos($key, '.') && !in_array($key, $fields, true)) {
+                if ($options['strict']) {
+                    throw new \think\db\exception\DbException('fields not exists:[' . $key . ']');
+                }
+            } elseif (is_null($val)) {
+                $result[$item] = 'NULL';
+            } elseif (is_array($val) && !empty($val) && is_string($val[0])) {
+                switch (strtoupper($val[0])) {
+                    case 'INC':
+                        $result[$item] = $item . ' + ' . floatval($val[1]);
+                        break;
+                    case 'DEC':
+                        $result[$item] = $item . ' - ' . floatval($val[1]);
+                        break;
+                }
+            } elseif (is_scalar($val)) {
+                // 过滤非标量数据
+                if (!$query->isAutoBind() && PDO::PARAM_STR == $bind[$key]) {
+                    $val = '\'' . $val . '\'';
+                }
+
+                $result[$item] = !$query->isAutoBind() ? $val : $this->parseDataBind($query, $key, $val, $bind);
+            }
+        }
+
+        return $result;
+    }
+
     /**
      * 取得数据库的表信息
      * @access   public
@@ -89,7 +217,7 @@ class Dm extends PDOConnection
     public function getTables(string $dbName = '') :array
     {
         $config = $this->getConfig();
-        $sql = "select table_name from all_tables";
+        $sql = "select table_name from all_tables where TABLESPACE_NAME='MAIN'";
         $pdo = $this->getPDOStatement($sql);
         $result = $pdo->fetchAll(PDO::FETCH_ASSOC);
         $info = [];
@@ -99,6 +227,15 @@ class Dm extends PDOConnection
         }
 
         return $info;
+    }
+
+    public function getCompatibleMode(){
+        $sql = <<<SQL
+SELECT para_name,para_type,para_value FROM V\$DM_INI WHERE PARA_NAME ='COMPATIBLE_MODE'
+SQL;
+        $pdo = $this->getPDOStatement($sql);
+        $result = $pdo->fetchAll(PDO::FETCH_ASSOC);
+        return $result[0];
     }
 
     /**
