@@ -44,6 +44,46 @@ class Dm extends Builder
 
 
     /**
+     * field分析
+     * @access protected
+     * @param  Query     $query     查询对象
+     * @param  mixed     $fields    字段名
+     * @return string
+     */
+    protected function parseField(Query $query, $fields): string
+    {
+        if (is_array($fields)) {
+            // 支持 'field1'=>'field2' 这样的字段别名定义
+            $array = [];
+
+            foreach ($fields as $key => $field) {
+                if ($field instanceof Raw) {
+                    $sql = $field->getValue();
+                    $bind = $field->getBind();
+                    $sql = str_ireplace('as ', 'AS ', $sql);
+                    if(stripos($sql, 'AS') !== false){
+                        $as_str = rtrim(strstr($sql, 'AS '));
+                        list($as, $alias) = explode('AS ', $as_str);
+                        $field = new Raw(str_ireplace($alias, "`{$alias}`", $sql), $bind);
+                    }
+                    $array[] = $this->parseRaw($query, $field);
+                } elseif (!is_numeric($key)) {
+                    $array[] = $this->parseKey($query, $key) . ' AS ' . $this->parseKey($query, $field, true);
+                } else {
+                    $array[] = $this->parseKey($query, $field);
+                }
+            }
+
+            $fieldsStr = implode(',', $array);
+        } else {
+            $fieldsStr = '*';
+        }
+
+        return $fieldsStr;
+    }
+
+
+    /**
      * order分析
      * @access protected
      * @param  Query     $query        查询对象
@@ -227,7 +267,6 @@ class Dm extends Builder
     {
         $sql    = $raw->getValue();
         $bind   = $raw->getBind();
-
         $tableName = $query->getTable();
         $tableFields = $query->getTableFields($tableName);
         if(!is_array($tableFields)){
