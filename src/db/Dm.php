@@ -544,6 +544,6 @@ class Dm extends Query
         }
 
         $name = $name ?: $this->name;
-        return $this->prefix . $name;
+        return $this->prefix . (ctype_upper($name)?$name:Str::snake($name));
     }
 }
