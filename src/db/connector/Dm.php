@@ -88,14 +88,32 @@ class Dm extends PDOConnection {
 	 * @return string
 	 */
 	protected function parseDsn(array $config): string {
-		$dsn = 'dm:host=' . $config['hostname'];
+        $dsn = sprintf('dm:host=%s;dbname=%s;charset=%s', $config['hostname']. ($config['hostport']?":{$config['hostport']}":''), $config['database'], $config['charset']);
+        return $dsn;
+    }
 
-		if (!empty($config['hostport'])) {
-			$dsn .= ':' . $config['hostport'];
-		}
-		$dsn .= ';dbname=' . $config['database'];
-		return $dsn;
-	}
+//    /**
+//     * 连接数据库方法
+//     * @access public
+//     * @param array      $config         连接参数
+//     * @param integer    $linkNum        连接序号
+//     * @param array|bool $autoConnection 是否自动连接主数据库（用于分布式）
+//     * @return PDO
+//     * @throws PDOException
+//     */
+//    public function connect(array $config = [], $linkNum = 0, $autoConnection = false): PDO
+//    {
+//        if (empty($config)) {
+//            $config = $this->config;
+//        } else {
+//            $config = array_merge($this->config, $config);
+//        }
+//
+//        $PDO = parent::connect($config, $linkNum, $autoConnection);
+//
+//        $PDO->query(sprintf("set CHAR_CODE %s", mb_strtoupper($config['charset'])));
+//        return $PDO;
+//    }
 
 	/**
 	 * 取得数据表的字段信息
