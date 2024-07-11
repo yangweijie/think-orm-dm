@@ -14,7 +14,12 @@ use think\db\Raw;
 class Dm extends Builder
 {
 
-    public function getDatabase(){
+    /**
+     * 获取当前连接的数据库
+     * @return string
+     */
+    public function getDatabase() :string
+    {
         static $connect;
         if(!$connect){
             $connect = $this->getConnection();
@@ -22,6 +27,20 @@ class Dm extends Builder
         return $connect->getConfig()['database'];
     }
 
+    /**
+     * having分析
+     * @access protected
+     * @param  Query  $query  查询对象
+     * @param  string $having
+     * @return string
+     */
+    protected function parseHaving(Query $query, string $having): string
+    {
+        if($having instanceof Raw){
+            return $this->parseRaw($query, $having);
+        }
+        return !empty($having) ? ' HAVING ' . $this->parseKey($query, $having) : '';
+    }
 
 
     /**
@@ -99,17 +118,6 @@ class Dm extends Builder
         }
 
         return $key;
-    }
-
-    /**
-     * 随机排序
-     * @access protected
-     * @param  Query     $query        查询对象
-     * @return string
-     */
-    protected function parseRand(Query $query) :string
-    {
-        return 'RAND()';
     }
 
     protected function parseData(Query $query, array $data = [], array $fields = [], array $bind = []): array
@@ -194,13 +202,13 @@ class Dm extends Builder
         if(stripos($sql, '"') === false && stripos($sql, "'") === false) {
             $tableName = $query->getTable();
             $tableFields = $query->getTableFields($tableName);
-            $sql_arr = implode(' ', $tableFields);
+            $sql_arr = is_array($tableFields)? $tableFields : implode(' ', $tableFields);
             foreach ($tableFields as $field){
                 if(in_array($field, $sql_arr)){
-                    $sql_arr[array_search($sql_arr, $field)] = "`{$field}`";
+                    $sql_arr[array_search($field, $sql_arr)] = "`{$field}`";
                 }
             }
-            $sql = implode(' ', $sql_arr);
+            $sql = implode(', ', $sql_arr);
         }
         $sql = str_ireplace(['group_concat'], ['wm_concat'], $sql);
         if ($bind) {
@@ -240,5 +248,16 @@ class Dm extends Builder
         }
 
         return implode(',', $item);
+    }
+
+    /**
+     * 随机排序
+     * @access protected
+     * @param  Query $query 查询对象
+     * @return string
+     */
+    protected function parseRand(Query $query): string
+    {
+        return 'RAND()';
     }
 }
