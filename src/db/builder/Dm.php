@@ -316,6 +316,38 @@ class Dm extends Builder
     }
 
     /**
+     * union分析
+     * @access protected
+     * @param  Query $query 查询对象
+     * @param  array $union
+     * @return string
+     */
+    protected function parseUnion(Query $query, array $union): string
+    {
+        if (empty($union)) {
+            return '';
+        }
+
+        $type = $union['type'];
+        unset($union['type']);
+
+        foreach ($union as $u) {
+            if ($u instanceof Closure) {
+                dump(1);
+                $sql[] = $type . ' ' . $this->parseClosure($query, $u);
+            } elseif (is_string($u)) {
+                $u = $this->parseRaw($query, new Raw($u));
+                $u = str_ireplace('from', 'FROM', $u);
+                $table = explode(' ', strstr($u, 'FROM'))[1];
+                $u = str_replace($table, $this->parseTable($query, $table), $u);
+                $sql[] = $type . ' ( ' . $u . ' )';
+            }
+        }
+
+        return ' ' . implode(' ', $sql);
+    }
+
+    /**
      * 随机排序
      * @access protected
      * @param  Query $query 查询对象
