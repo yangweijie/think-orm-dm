@@ -218,8 +218,7 @@ class Dm extends Query
      */
     public function replace(bool $replace = true)
     {
-        $this->options['replace'] = $replace;
-        return $this;
+        throw new \Exception("不支持 replace into");
     }
 
     /**
@@ -242,8 +241,7 @@ class Dm extends Query
      */
     public function duplicate($duplicate)
     {
-        $this->options['duplicate'] = $duplicate;
-        return $this;
+        throw new \Exception("不支持 on duplicate key");
     }
 
     /**

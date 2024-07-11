@@ -117,3 +117,6 @@ $ret = ApiLog::order('[rand]')->limit(10)->select();
 Db::getCompatibleMode();
 ~~~
 
+
+## bug
+max(id) bigint 返回了 小数点
