@@ -109,8 +109,17 @@ class Dm extends Builder
         }
 
         $key = str_replace('`', '', $key);
-        if ('*' != $key && !preg_match('/[,\'\"\*\(\).\s]/', $key)) {
-            $key = '"' . $key . '"';
+        if('*' != $key){
+            if(!preg_match('/[,\'\"\*\(\).\s]/', $key)){
+                $key = "`{$key}`";
+            }else{
+                $tableName = $query->getTable();
+                $tableFields = $query->getTableFields($tableName);
+                if(!is_array($tableFields)){
+                    $tableFields = implode(' ', $tableFields);
+                }
+                $key = $this->quoteFields($key, $tableFields);
+            }
         }
 
         if (isset($table)) {
@@ -187,6 +196,26 @@ class Dm extends Builder
     }
 
     /**
+     * 将sql中的数据库字段加``
+     * @param string $sql
+     * @param array $fields
+     * @return string
+     */
+    public function quoteFields($sql, $fields) :string
+    {
+        $newString = "";
+        foreach ($fields as $field) {
+            $replace = preg_quote("`{$field}`", '/');
+            // 使用 preg_replace_callback 函数，将字符串中匹配到的单词替换为对应的替换词
+            $newString = preg_replace_callback("/\b{$field}\b/", function ($matches) use ($replace) {
+                return $replace;
+            }, $sql);
+            $sql = $newString;
+        }
+        return $newString;
+    }
+
+    /**
      * 分析Raw对象
      *
      * @param \think\db\BaseQuery $query 查询对象
@@ -199,17 +228,14 @@ class Dm extends Builder
         $sql    = $raw->getValue();
         $bind   = $raw->getBind();
 
-        if(stripos($sql, '"') === false && stripos($sql, "'") === false) {
-            $tableName = $query->getTable();
-            $tableFields = $query->getTableFields($tableName);
-            $sql_arr = is_array($tableFields)? $tableFields : implode(' ', $tableFields);
-            foreach ($tableFields as $field){
-                if(in_array($field, $sql_arr)){
-                    $sql_arr[array_search($field, $sql_arr)] = "`{$field}`";
-                }
-            }
-            $sql = implode(', ', $sql_arr);
+        $tableName = $query->getTable();
+        $tableFields = $query->getTableFields($tableName);
+        if(!is_array($tableFields)){
+            $tableFields = implode(' ', $tableFields);
         }
+        $sql = $this->quoteFields($sql, $tableFields);
+
+        // 兼容group_concat
         $sql = str_ireplace(['group_concat'], ['wm_concat'], $sql);
         if ($bind) {
             $query->bindParams($sql, $bind);
