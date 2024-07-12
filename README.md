@@ -114,9 +114,27 @@ $ret = ApiLog::order('[rand]')->limit(10)->select();
 ### 获取兼容模式
 
 ~~~ php
-Db::getCompatibleMode();
+Db::connect('dm')->getCompatibleMode();
+~~~
+### 私有方法
+~~~
+\think\db\Dm::procedureName('proc');  // 转换为 `database`.`proc`
 ~~~
 
-
 ## bug
-max(id) bigint 返回了 小数点
+max(id) bigint 返回了 小数点 dump 函数float 显示了一位小数 var_dump 没问题
+
+## todo
+
+1. - [ ] 测试表分区功能
+2. - [ ] 测试xa事务
+3. - [ ] 测试mac平台
+4. - [ ] 测试出一些mysql函数有dm 没有的 并找出替代方案
+5. - [ ] 写单元测试
+
+> PS:
+> 
+> 经过一轮自测基本使用没问题了，如果你的系统部用到一些mysql 的高级用法 如xa 事务、 分区、锁。
+> 可以大胆的用本库进行迁移测试。希望大家多测试，及时反馈问题给我。
+> 数据库驱动移植也试我第一次尝试，最终的任务是人力和测试字符串替换了。“锁”粗略看了下，比较复杂，貌似不支持行锁。
+> replace into 对应的 是 merge into 文档里也写的比较复杂

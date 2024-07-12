@@ -92,29 +92,6 @@ class Dm extends PDOConnection {
         return $dsn;
     }
 
-//    /**
-//     * 连接数据库方法
-//     * @access public
-//     * @param array      $config         连接参数
-//     * @param integer    $linkNum        连接序号
-//     * @param array|bool $autoConnection 是否自动连接主数据库（用于分布式）
-//     * @return PDO
-//     * @throws PDOException
-//     */
-//    public function connect(array $config = [], $linkNum = 0, $autoConnection = false): PDO
-//    {
-//        if (empty($config)) {
-//            $config = $this->config;
-//        } else {
-//            $config = array_merge($this->config, $config);
-//        }
-//
-//        $PDO = parent::connect($config, $linkNum, $autoConnection);
-//
-//        $PDO->query(sprintf("set CHAR_CODE %s", mb_strtoupper($config['charset'])));
-//        return $PDO;
-//    }
-
 	/**
 	 * 取得数据表的字段信息
 	 * @access public
@@ -149,95 +126,23 @@ class Dm extends PDOConnection {
 	}
 
 	/**
-	 * 数据分析
-	 * @access protected
-	 * @param  Query $query     查询对象
-	 * @param  array $data      数据
-	 * @param  array $fields    字段信息
-	 * @param  array $bind      参数绑定
-	 * @return array
-	 */
-	protected function parseData(Query $query, array $data = [], array $fields = [], array $bind = []): array {
-		if (empty($data)) {
-			return [];
-		}
-
-		$options = $query->getOptions();
-
-		// 获取绑定信息
-		if (empty($bind)) {
-			$bind = $query->getFieldsBindType();
-		}
-
-		if (empty($fields)) {
-			if (empty($options['field']) || '*' == $options['field']) {
-				$fields = array_keys($bind);
-			} else {
-				$fields = $options['field'];
-			}
-		}
-
-		$result = [];
-
-		foreach ($data as $key => $val) {
-			$item = $this->parseKey($query, $key, true);
-			if ($val instanceof Raw) {
-				$result[$item] = $this->parseRaw($query, $val);
-				continue;
-			} elseif (!is_scalar($val) && (in_array($key, (array) $query->getOptions('json')) || 'json' == $query->getFieldType($key))) {
-				$val = json_encode($val);
-			}
-
-			if (false !== strpos($key, '->')) {
-				[$key, $name] = explode('->', $key, 2);
-				$item = $this->parseKey($query, $key);
-
-				$result[$item . '->' . $name] = 'json_set(' . $item . ', \'$.' . $name . '\', ' . $this->parseDataBind($query, $key . '->' . $name, $val, $bind) . ')';
-			} elseif (false === strpos($key, '.') && !in_array($key, $fields, true)) {
-				if ($options['strict']) {
-					throw new \think\db\exception\DbException('fields not exists:[' . $key . ']');
-				}
-			} elseif (is_null($val)) {
-				$result[$item] = 'NULL';
-			} elseif (is_array($val) && !empty($val) && is_string($val[0])) {
-				switch (strtoupper($val[0])) {
-				case 'INC':
-					$result[$item] = $item . ' + ' . floatval($val[1]);
-					break;
-				case 'DEC':
-					$result[$item] = $item . ' - ' . floatval($val[1]);
-					break;
-				}
-			} elseif (is_scalar($val)) {
-				// 过滤非标量数据
-				if (!$query->isAutoBind() && PDO::PARAM_STR == $bind[$key]) {
-					$val = '\'' . $val . '\'';
-				}
-
-				$result[$item] = !$query->isAutoBind() ? $val : $this->parseDataBind($query, $key, $val, $bind);
-			}
-		}
-
-		return $result;
-	}
-
-	/**
 	 * 取得数据库的表信息
 	 * @access   public
 	 * @param string $dbName
 	 * @return array
 	 */
 	public function getTables(string $dbName = ''): array {
-		$config = $this->getConfig();
-		$sql = "select table_name from USER_TABLES where TABLESPACE_NAME='MAIN'";
-		$pdo = $this->getPDOStatement($sql);
-		$result = $pdo->fetchAll(PDO::FETCH_ASSOC);
-		$info = [];
+        static $info;
+        if(!$info){
+            $sql = "select table_name from USER_TABLES where TABLESPACE_NAME='MAIN'";
+            $pdo = $this->getPDOStatement($sql);
+            $result = $pdo->fetchAll(PDO::FETCH_ASSOC);
+            $info = [];
 
-		foreach ($result as $key => $val) {
-			$info[$key] = current($val);
-		}
-
+            foreach ($result as $key => $val) {
+                $info[$key] = current($val);
+            }
+        }
 		return $info;
 	}
 

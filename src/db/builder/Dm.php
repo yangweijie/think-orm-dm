@@ -85,7 +85,8 @@ class Dm extends Builder
         if (is_array($fields)) {
             // 支持 'field1'=>'field2' 这样的字段别名定义
             $array = [];
-
+            $tableName = $query->getTable();
+            $tableFields = $query->getTableFields($tableName);
             foreach ($fields as $key => $field) {
                 if ($field instanceof Raw) {
                     $sql = $field->getValue();
@@ -94,7 +95,18 @@ class Dm extends Builder
                     if(stripos($sql, 'AS') !== false){
                         $as_str = rtrim(strstr($sql, 'AS '));
                         list($as, $alias) = explode('AS ', $as_str);
+                        $as = explode('AS ', $sql)[0];
+                        // 支持-> json字段查询
+                        if(strpos($sql, '->') !== false){
+                            $newAs = DmQuery::parseJson($as, $tableFields);
+                            $sql = str_ireplace(trim($as), $newAs, $sql);
+                        }
                         $field = new Raw(str_ireplace($alias, "`{$alias}`", $sql), $bind);
+                    }else{
+                        if(strpos($sql, '->') !== false){
+                            $sql = DmQuery::parseJson($sql, $tableFields);
+                            $field = new Raw($sql, $bind);
+                        }
                     }
                     $array[] = $this->parseRaw($query, $field);
                 } elseif (!is_numeric($key)) {
@@ -188,7 +200,7 @@ class Dm extends Builder
                 if(!is_array($tableFields)){
                     $tableFields = implode(' ', $tableFields);
                 }
-                $key = $this->quoteFields($key, $tableFields);
+                $key = DmQuery::quoteFields($key, $tableFields);
             }
         }
 
@@ -233,7 +245,9 @@ class Dm extends Builder
             }
 
             if (false !== strpos($key, '->')) {
-                throw new \think\Exception('不支持json 字段更新');
+                [$key, $name]  = explode('->', $key, 2);
+                $item          = $this->parseKey($query, $key);
+                $result[$item] = 'json_set(' . $item . ', \'$.' . $name . '\', ' . $this->parseDataBind($query, $key . '->' . $name, $val, $bind) . ')';
             } elseif (false === strpos($key, '.') && !in_array($key, $fields, true)) {
                 if ($options['strict']) {
                     throw new Exception('fields not exists:[' . $key . ']');
@@ -304,7 +318,6 @@ class Dm extends Builder
         $item    = [];
         $options = $query->getOptions();
         $database = $this->getDatabase();
-//        "`{$database}`.".
         $all_tables = $this->getConnection()->getTables();
         foreach ((array) $tables as $key => $table) {
             $is_alias = !in_array($table, $all_tables) || stripos($table, ')') !== false;
@@ -346,7 +359,6 @@ class Dm extends Builder
 
         foreach ($union as $u) {
             if ($u instanceof Closure) {
-                dump(1);
                 $sql[] = $type . ' ' . $this->parseClosure($query, $u);
             } elseif (is_string($u)) {
                 $u = $this->parseRaw($query, new Raw($u));
