@@ -2,12 +2,14 @@
 
 namespace think\db\builder;
 
+use Closure;
+use PDO;
 use think\db\Builder;
 use think\facade\Db;
 use think\db\exception\DbException as Exception;
-use think\db\Expression;
-use think\db\Query;
+use think\db\BaseQuery as Query;
 use think\db\Raw;
+use think\db\concern\TableFieldInfo;
 use think\db\Dm as DmQuery;
 
 /**
@@ -15,6 +17,8 @@ use think\db\Dm as DmQuery;
  */
 class Dm extends Builder
 {
+
+    use TableFieldInfo;
 
     /**
      * 获取当前连接的数据库
@@ -32,11 +36,11 @@ class Dm extends Builder
     /**
      * having分析
      * @access protected
-     * @param  Query  $query  查询对象
-     * @param  string $having
+     * @param Query $query 查询对象
+     * @param $having
      * @return string
      */
-    protected function parseHaving(Query $query, string $having): string
+    protected function parseHaving(Query $query, $having): string
     {
         if($having instanceof Raw){
             return $this->parseRaw($query, $having);
@@ -48,9 +52,10 @@ class Dm extends Builder
     /**
      * where分析
      * @access protected
-     * @param  Query $query   查询对象
-     * @param  mixed $where   查询条件
+     * @param Query $query 查询对象
+     * @param mixed $where 查询条件
      * @return string
+     * @throws Exception
      */
     protected function parseWhere(Query $query, array $where): string
     {
@@ -65,7 +70,7 @@ class Dm extends Builder
             // 附加软删除条件
             [$field, $condition] = $options['soft_delete'];
 
-            $binds    = $query->getFieldsBindType();
+            $binds    = $this->getFieldsBindType();
             $whereStr = $whereStr ? '( ' . $whereStr . ' ) AND ' : '';
             $whereStr = $whereStr . $this->parseWhereItem($query, $field, $condition, $binds);
         }
@@ -80,13 +85,13 @@ class Dm extends Builder
      * @param  mixed     $fields    字段名
      * @return string
      */
-    protected function parseField(Query $query, $fields): string
+    protected function parseField(Query $query, array $fields): string
     {
         if (is_array($fields)) {
             // 支持 'field1'=>'field2' 这样的字段别名定义
             $array = [];
             $tableName = $query->getTable();
-            $tableFields = $query->getTableFields($tableName);
+            $tableFields = $this->getTableFields($tableName);
             foreach ($fields as $key => $field) {
                 if ($field instanceof Raw) {
                     $sql = $field->getValue();
@@ -124,39 +129,6 @@ class Dm extends Builder
         return $fieldsStr;
     }
 
-
-    /**
-     * order分析
-     * @access protected
-     * @param  Query     $query        查询对象
-     * @param  mixed     $order
-     * @return string
-     */
-    protected function parseOrder(Query $query, array $order) :string
-    {
-        foreach ($order as $key => $val) {
-            if ($val instanceof Expression) {
-                $array[] = $val->getValue();
-            } elseif (is_array($val) && preg_match('/^[\w\.]+$/', $key)) {
-                $array[] = $this->parseOrderField($query, $key, $val);
-            } elseif ('[rand]' == $val) {
-                $array[] = $this->parseRand($query);
-            } elseif (is_string($val)) {
-                if (is_numeric($key)) {
-                    list($key, $sort) = explode(' ', strpos($val, ' ') ? $val : $val . ' ');
-                } else {
-                    $sort = $val;
-                }
-
-                $sort    = strtoupper($sort);
-                $sort    = in_array($sort, ['ASC', 'DESC'], true) ? ' ' . $sort : '';
-                $array[] = $this->parseKey($query, $key, true) . $sort;
-            }
-        }
-
-        return empty($array) ? '' : ' ORDER BY ' . implode(',', $array);
-    }
-
     /**
      * 字段和表名处理
      * @access public
@@ -169,7 +141,7 @@ class Dm extends Builder
     {
         if (is_numeric($key)) {
             return $key;
-        } elseif ($key instanceof Expression) {
+        } elseif ($key instanceof Raw) {
             return $key->getValue();
         }
 
@@ -196,7 +168,7 @@ class Dm extends Builder
                 $key = "`{$key}`";
             }else{
                 $tableName = $query->getTable();
-                $tableFields = $query->getTableFields($tableName);
+                $tableFields = $query->getConnection()->getTableFields($tableName);
                 if(!is_array($tableFields)){
                     $tableFields = implode(' ', $tableFields);
                 }
@@ -289,7 +261,7 @@ class Dm extends Builder
         $sql    = $raw->getValue();
         $bind   = $raw->getBind();
         $tableName = $query->getTable();
-        $tableFields = $query->getTableFields($tableName);
+        $tableFields = $this->getTableFields($tableName);
         if(!is_array($tableFields)){
             $tableFields = implode(' ', $tableFields);
         }
@@ -356,7 +328,7 @@ class Dm extends Builder
 
         $type = $union['type'];
         unset($union['type']);
-
+        $sql = [];
         foreach ($union as $u) {
             if ($u instanceof Closure) {
                 $sql[] = $type . ' ' . $this->parseClosure($query, $u);

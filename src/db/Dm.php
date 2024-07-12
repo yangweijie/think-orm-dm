@@ -2,18 +2,15 @@
 
 namespace think\db;
 
-use think\db\Fetch;
-use think\db\Raw;
-use PDOStatement;
-use think\facade\Db;
+use Exception;
 use think\helper\Str;
 
 class Dm extends Query
 {
 
-    public static function procedureName($name) :string
+    public static function procedureName(ConnectionInterface $connection, $name) :string
     {
-        $database = app('config')->get('database.connections.dm.database');
+        $database = $connection->getConfig('database.connections.dm.database');
         if(strpos($name, '.') === false){
             return "`{$database}`.`{$name}`";
         }
@@ -52,7 +49,7 @@ class Dm extends Query
      * @param array $fields
      * @return string
      */
-    public static function quoteFields($sql, $fields) :string
+    public static function quoteFields(string $sql, array $fields) :string
     {
         if(strpos($sql, '`') !== false){
             return $sql;
@@ -75,7 +72,7 @@ class Dm extends Query
      * @param bool $replace 是否使用REPLACE写入数据
      * @return $this
      */
-    public function replace(bool $replace = true)
+    public function replace(bool $replace = true): static
     {
         $this->options['replace'] = false;
         return $this;
@@ -86,10 +83,11 @@ class Dm extends Query
      * @access public
      * @param array|string|Raw $duplicate DUPLICATE信息
      * @return $this
+     * @throws Exception
      */
     public function duplicate($duplicate)
     {
-        throw new \Exception("不支持 on duplicate key");
+        throw new Exception("不支持 on duplicate key");
     }
 
     public function getDatabase(){
@@ -106,7 +104,6 @@ class Dm extends Query
      * @access protected
      * @param array|string|Raw $join  JION表名
      * @param string           $alias 别名
-     * @return string|array
      */
     protected function getJoinTable($join, &$alias = null)
     {
@@ -190,7 +187,7 @@ class Dm extends Query
      * @param string $name 不含前缀的数据表名字
      * @return mixed
      */
-    public function getTable(string $name = '')
+    public function getTable(string $name = ''): mixed
     {
         if (empty($name) && isset($this->options['table'])) {
             return $this->options['table'];

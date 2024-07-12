@@ -1,5 +1,5 @@
 # think-orm-dm
-dm database for ThinkPHP6+
+dm database for think-orm 3.0
 
 > 达梦数据库对单双引号有着严格的规定，在执行SQL语句的时候，字符串常量应使用单引号括起，关键字、对象名、字段名、别名等则使用双引号括起。而MySQL中则没有严格的规定，在适配过程中MySQL SQL语句中的单双引号严格按照DM的规定修改。
 

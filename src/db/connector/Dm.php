@@ -10,11 +10,8 @@
 namespace think\db\connector;
 
 use PDO;
-use think\db\exception\PDOException;
+use think\db\exception\DbException;
 use think\db\PDOConnection;
-use think\db\Query;
-use think\db\Raw;
-use think\Exception;
 
 /**
  *  达梦数据库驱动
@@ -92,45 +89,42 @@ class Dm extends PDOConnection {
         return $dsn;
     }
 
-	/**
-	 * 取得数据表的字段信息
-	 * @access public
-	 * @param string $tableName
-	 * @return array
-	 */
+    /**
+     * 取得数据表的字段信息
+     * @access public
+     * @param string $tableName
+     * @return array
+     * @throws DbException
+     */
 	public function getFields(string $tableName): array {
-		$config = $this->getConfig();
 		$sql = "select * from user_tab_columns where table_name='{$tableName}'";
-		try {
-			$pdo = $this->query($sql, [], false, true);
-			$result = $pdo;
-			$info = [];
+        $pdo = $this->query($sql, [], true);
+        $result = $pdo;
+        $info = [];
 
-			if ($result) {
-				foreach ($result as $key => $val) {
-					$val = array_change_key_case($val);
-					$info[$val['column_name']] = [
-						'name' => $val['column_name'],
-						'type' => $val['data_type'],
-						'notnull' => 'Y' === $val['nullable'],
-						'default' => $val['data_default'],
-						'primary' => $val['column_name'] === 'id',
-						'autoinc' => false,
-					];
-				}
-			}
-			return $this->fieldCase($info);
-		} catch (PDOException $e) {
-			throw new Exception(iconv('gbk', 'utf-8', $e->getMessage()));
-		}
+        if ($result) {
+            foreach ($result as $key => $val) {
+                $val = array_change_key_case($val);
+                $info[$val['column_name']] = [
+                    'name' => $val['column_name'],
+                    'type' => $val['data_type'],
+                    'notnull' => 'Y' === $val['nullable'],
+                    'default' => $val['data_default'],
+                    'primary' => $val['column_name'] === 'id',
+                    'autoinc' => false,
+                ];
+            }
+        }
+        return $this->fieldCase($info);
 	}
 
-	/**
-	 * 取得数据库的表信息
-	 * @access   public
-	 * @param string $dbName
-	 * @return array
-	 */
+    /**
+     * 取得数据库的表信息
+     * @access   public
+     * @param string $dbName
+     * @return array
+     * @throws DbException
+     */
 	public function getTables(string $dbName = ''): array {
         static $info;
         if(!$info){

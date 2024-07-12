@@ -3,7 +3,9 @@
     "description": "dm database for think-orm",
     "type": "library",
     "require": {
-        "topthink/think-orm": "^2.0"
+        "topthink/think-orm": "^3.0",
+        "ext-pdo": "*",
+        "ext-ctype": "*"
     },
     "license": "Apache-2.0",
     "autoload": {
