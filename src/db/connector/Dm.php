@@ -144,7 +144,6 @@ class Dm extends PDOConnection {
 			}
 			return $this->fieldCase($info);
 		} catch (PDOException $e) {
-			dump($e->getData());
 			throw new Exception(iconv('gbk', 'utf-8', $e->getMessage()));
 		}
 	}

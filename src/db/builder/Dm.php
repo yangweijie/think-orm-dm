@@ -3,10 +3,12 @@
 namespace think\db\builder;
 
 use think\db\Builder;
+use think\facade\Db;
 use think\db\exception\DbException as Exception;
 use think\db\Expression;
 use think\db\Query;
 use think\db\Raw;
+use think\db\Dm as DmQuery;
 
 /**
  * 达梦数据库驱动
@@ -42,6 +44,34 @@ class Dm extends Builder
         return !empty($having) ? ' HAVING ' . $this->parseKey($query, $having) : '';
     }
 
+
+    /**
+     * where分析
+     * @access protected
+     * @param  Query $query   查询对象
+     * @param  mixed $where   查询条件
+     * @return string
+     */
+    protected function parseWhere(Query $query, array $where): string
+    {
+        $options  = $query->getOptions();
+        $whereStr = $this->buildWhere($query, $where);
+        // 子查询字段
+        if(strpos($whereStr, '.') !== false){
+            list($tableAlias, $field) = explode('.', $whereStr, 2);
+            $whereStr = DmQuery::quoteFields($whereStr, [trim($tableAlias)]);
+        }
+        if (!empty($options['soft_delete'])) {
+            // 附加软删除条件
+            [$field, $condition] = $options['soft_delete'];
+
+            $binds    = $query->getFieldsBindType();
+            $whereStr = $whereStr ? '( ' . $whereStr . ' ) AND ' : '';
+            $whereStr = $whereStr . $this->parseWhereItem($query, $field, $condition, $binds);
+        }
+
+        return empty($whereStr) ? '' : ' WHERE ' . $whereStr;
+    }
 
     /**
      * field分析
@@ -203,10 +233,7 @@ class Dm extends Builder
             }
 
             if (false !== strpos($key, '->')) {
-                [$key, $name]  = explode('->', $key, 2);
-                $item          = $this->parseKey($query, $key);
-
-                $result[$item . '->' . $name] = 'json_set(' . $item . ', \'$.' . $name . '\', ' . $this->parseDataBind($query, $key . '->' . $name, $val, $bind) . ')';
+                throw new \think\Exception('不支持json 字段更新');
             } elseif (false === strpos($key, '.') && !in_array($key, $fields, true)) {
                 if ($options['strict']) {
                     throw new Exception('fields not exists:[' . $key . ']');
@@ -236,26 +263,6 @@ class Dm extends Builder
     }
 
     /**
-     * 将sql中的数据库字段加``
-     * @param string $sql
-     * @param array $fields
-     * @return string
-     */
-    public function quoteFields($sql, $fields) :string
-    {
-        $newString = "";
-        foreach ($fields as $field) {
-            $replace = preg_quote("`{$field}`", '/');
-            // 使用 preg_replace_callback 函数，将字符串中匹配到的单词替换为对应的替换词
-            $newString = preg_replace_callback("/\b{$field}\b/", function ($matches) use ($replace) {
-                return $replace;
-            }, $sql);
-            $sql = $newString;
-        }
-        return $newString;
-    }
-
-    /**
      * 分析Raw对象
      *
      * @param \think\db\BaseQuery $query 查询对象
@@ -272,7 +279,9 @@ class Dm extends Builder
         if(!is_array($tableFields)){
             $tableFields = implode(' ', $tableFields);
         }
-        $sql = $this->quoteFields($sql, $tableFields);
+        if(stripos($sql, '`') === false){
+            $sql = DmQuery::quoteFields($sql, $tableFields);
+        }
 
         // 兼容group_concat
         $sql = str_ireplace(['group_concat'], ['wm_concat'], $sql);
@@ -298,8 +307,12 @@ class Dm extends Builder
 //        "`{$database}`.".
         $all_tables = $this->getConnection()->getTables();
         foreach ((array) $tables as $key => $table) {
-            $is_alias = !in_array($table, $all_tables);
+            $is_alias = !in_array($table, $all_tables) || stripos($table, ')') !== false;
             $old_table = $table;
+            if($is_alias && !isset($options['alias'][$old_table])){
+                $alias = DmQuery::parseAliasFromTable($old_table);
+                $table = $old_table = Db::raw(str_ireplace(' '.$alias, ' '.$this->parseKey($query, $alias), $old_table));
+            }
             $table = $table instanceof Raw? $table: ($is_alias? $table: "`{$database}`.".$table);
             if ($old_table instanceof Raw) {
                 $item[] = $this->parseRaw($query, $table);

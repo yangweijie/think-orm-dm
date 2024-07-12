@@ -10,9 +10,33 @@ use think\helper\Str;
 class Dm extends Query
 {
 
-    use concern\JoinAndViewQuery;
-    use concern\ParamsBind;
-    use concern\TableFieldInfo;
+    public static function parseAliasFromTable($table): string
+    {
+        $str = strstr( $table, ')');
+        $str = str_ireplace(['as', ')'], ['', ''], $str);
+        $str = trim($str);
+        return $str;
+    }
+
+    /**
+     * 将sql中的数据库字段加``
+     * @param string $sql
+     * @param array $fields
+     * @return string
+     */
+    public static function quoteFields($sql, $fields) :string
+    {
+        $newString = "";
+        foreach ($fields as $field) {
+            $replace = preg_quote("`{$field}`", '/');
+            // 使用 preg_replace_callback 函数，将字符串中匹配到的单词替换为对应的替换词
+            $newString = preg_replace_callback("/\b{$field}\b/", function ($matches) use ($replace) {
+                return $replace;
+            }, $sql);
+            $sql = $newString;
+        }
+        return $newString;
+    }
 
     /**
      * 表达式方式指定Field排序
@@ -358,25 +382,7 @@ class Dm extends Query
         return $this->connection->pdo($this);
     }
 
-    /**
-     * 使用游标查找记录
-     * @access public
-     * @param mixed $data 数据
-     * @return \Generator
-     */
-    public function cursor($data = null)
-    {
-        if (!is_null($data)) {
-            // 主键条件分析
-            $this->parsePkWhere($data);
-        }
 
-        $this->options['data'] = $data;
-
-        $connection = clone $this->connection;
-
-        return $connection->cursor($this);
-    }
 
     /**
      * 分批数据返回处理
