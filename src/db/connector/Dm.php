@@ -98,32 +98,41 @@ class Dm extends PDOConnection {
 	 * @param string $tableName
 	 * @return array
 	 */
-	public function getFields(string $tableName): array {
-		$config = $this->getConfig();
-		$sql = "select * from user_tab_columns where table_name='{$tableName}'";
-		try {
-			$pdo = $this->query($sql, [], false, true);
-			$result = $pdo;
-			$info = [];
+    /**
+     * 取得数据表的字段信息.
+     *
+     * @param string $tableName
+     *
+     * @return array
+     */
+    public function getFields(string $tableName): array
+    {
+        [$tableName] = explode(' ', $tableName);
 
-			if ($result) {
-				foreach ($result as $key => $val) {
-					$val = array_change_key_case($val);
-					$info[$val['column_name']] = [
-						'name' => $val['column_name'],
-						'type' => $val['data_type'],
-						'notnull' => 'Y' === $val['nullable'],
-						'default' => $val['data_default'],
-						'primary' => $val['column_name'] === 'id',
-						'autoinc' => false,
-					];
-				}
-			}
-			return $this->fieldCase($info);
-		} catch (PDOException $e) {
-			throw new Exception(iconv('gbk', 'utf-8', $e->getMessage()));
-		}
-	}
+        $sql = "select * from user_tab_columns where table_name='{$tableName}'";
+        $pdo = $this->query($sql, [], true);
+        $sql2 = "select a.name COL_NAME from  SYS.SYSCOLUMNS a,all_tables b,sys.sysobjects c where a.INFO2 & 0x01 = 0x01
+and a.id=c.id and c.name= b.table_name and b.TABLE_NAME = '{$tableName}'";
+        $table_auoinc_fields = array_column($this->query($sql2, [], true), 'COL_NAME');
+        $result = $pdo;
+        $info   = [];
+
+        if (!empty($result)) {
+            foreach ($result as $key => $val) {
+                $val = array_change_key_case($val);
+                $info[$val['column_name']] = [
+                    'name'    => $val['column_name'],
+                    'type'    => $val['data_type'],
+                    'notnull' => (bool) 'Y' === $val['nullable'],
+                    'default' => $val['data_default'],
+                    'primary' => $val['column_id'] === 1,
+                    'autoinc' => in_array($val['column_name'], $table_auoinc_fields),
+                ];
+            }
+        }
+
+        return $this->fieldCase($info);
+    }
 
 	/**
 	 * 取得数据库的表信息
