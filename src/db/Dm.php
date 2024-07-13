@@ -10,7 +10,7 @@ class Dm extends Query
 
     public static function procedureName(ConnectionInterface $connection, $name) :string
     {
-        $database = $connection->getConfig('database.connections.dm.database');
+        $database = $connection->getConfig('database');
         if(strpos($name, '.') === false){
             return "\"{$database}\".\"{$name}\"";
         }
@@ -141,7 +141,7 @@ class Dm extends Query
             $table = "\"{$database}\".{$table}";
         }
         if (!empty($alias) && $table != $alias) {
-            $table = [$table => $alias];
+            $table = [$table=>$alias];
         }
         return $table;
     }
@@ -159,7 +159,6 @@ class Dm extends Query
     {
         $table = $this->getJoinTable($join);
         $alias = $this->getOptions('alias')?:[];
-
         if(is_string($table)){
             $alias[$table] = $table;
         }else{
@@ -176,6 +175,7 @@ class Dm extends Query
             return "\"{$item}\".";
         }, $alias_values), $condition);
         $condition = str_ireplace('="', ' = "', $condition);
+        $this->options['alias'] = $alias;
         $this->options['join'][] = [$table, strtoupper($type), $condition];
 
         return $this;

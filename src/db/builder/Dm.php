@@ -6,10 +6,11 @@ use think\db\Builder;
 use think\db\BaseQuery as Query;
 use think\db\Dm as DmQuery;
 use think\db\Raw;
+use think\facade\Db;
 use Exception;
 
 /**
- * Pgsql数据库驱动.
+ * 达梦数据库驱动.
  */
 class Dm extends Builder
 {
@@ -26,6 +27,36 @@ class Dm extends Builder
             $connect = $this->getConnection();
         }
         return $connect->getConfig()['database'];
+    }
+
+    /**
+     * join分析.
+     *
+     * @param Query $query 查询对象
+     * @param array $join
+     *
+     * @return string
+     */
+    protected function parseJoin(Query $query, array $join): string
+    {
+        $joinStr = '';
+
+        foreach ($join as $item) {
+            [$table, $type, $on] = $item;
+            if (str_contains($on, '=')) {
+                [$val1, $val2] = explode('=', $on, 2);
+
+                $condition = $this->parseKey($query, $val1) . '=' . $this->parseKey($query, $val2);
+            } else {
+                $condition = $on;
+            }
+
+            $table = $this->parseTable($query, $table);
+
+            $joinStr .= ' ' . $type . ' JOIN ' . $table . ' ON ' . $condition;
+        }
+
+        return $joinStr;
     }
 
     /**
@@ -287,7 +318,7 @@ class Dm extends Builder
         foreach ((array) $tables as $key => $table) {
             $is_alias = !in_array($table, $all_tables) || stripos($table, ')') !== false;
             $old_table = $table;
-            if($is_alias && !isset($options['alias'][$old_table])){
+            if($is_alias && !isset($options['alias'][$key])){
                 $alias = DmQuery::parseAliasFromTable($old_table);
                 $table = $old_table = Db::raw(str_ireplace(' '.$alias, ' '.$this->parseKey($query, $alias), $old_table));
             }
