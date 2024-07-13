@@ -92,9 +92,6 @@ class Dm extends Query
      */
     public static function quoteFields(string $sql, array $fields) :string
     {
-        if(strpos($sql, '"') !== false){
-            return $sql;
-        }
         $newString = "";
         foreach ($fields as $field) {
             $replace = preg_quote("\"{$field}\"", '/');
