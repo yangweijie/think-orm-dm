@@ -57,9 +57,9 @@ class Dm extends Builder
         $options  = $query->getOptions();
         $whereStr = $this->buildWhere($query, $where);
         // 子查询字段
-        if(strpos($whereStr, '.') !== false){
+        if(strpos($whereStr, '.') !== false && strpos($whereStr, ')') === false){
             list($tableAlias, $field) = explode('.', $whereStr, 2);
-            $whereStr = DmQuery::quoteFields($whereStr, [trim($tableAlias)]);
+            $whereStr = DmQuery::quoteFields($whereStr, [trim($tableAlias)], true);
         }
         if (!empty($options['soft_delete'])) {
             // 附加软删除条件
@@ -92,6 +92,7 @@ class Dm extends Builder
                     $sql = $field->getValue();
                     $bind = $field->getBind();
                     $sql = str_ireplace('as ', 'AS ', $sql);
+                    $sql = $this->parseKey($query, $sql);
                     if(stripos($sql, 'AS') !== false){
                         $as_str = rtrim(strstr($sql, 'AS '));
                         list($as, $alias) = explode('AS ', $as_str);
@@ -322,7 +323,7 @@ class Dm extends Builder
         foreach ((array) $tables as $key => $table) {
             $is_alias = !in_array($table, $all_tables) || stripos($table, ')') !== false;
             $old_table = $table;
-            if($is_alias && !isset($options['alias'][$old_table])){
+            if($is_alias && !isset($options['alias'][$key])){
                 $alias = DmQuery::parseAliasFromTable($old_table);
                 $table = $old_table = Db::raw(str_ireplace(' '.$alias, ' '.$this->parseKey($query, $alias), $old_table));
             }
@@ -357,6 +358,7 @@ class Dm extends Builder
         $type = $union['type'];
         unset($union['type']);
 
+        $sql = [];
         foreach ($union as $u) {
             if ($u instanceof Closure) {
                 $sql[] = $type . ' ' . $this->parseClosure($query, $u);

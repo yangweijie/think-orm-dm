@@ -2,9 +2,9 @@
 
 namespace think\db;
 
+use PDOStatement;
 use think\db\Fetch;
 use think\db\Raw;
-use PDOStatement;
 use think\facade\Db;
 use think\helper\Str;
 
@@ -52,9 +52,9 @@ class Dm extends Query
      * @param array $fields
      * @return string
      */
-    public static function quoteFields($sql, $fields) :string
+    public static function quoteFields($sql, $fields, $force = false) :string
     {
-        if(strpos($sql, '`') !== false){
+        if(strpos($sql, '`') !== false && !$force){
             return $sql;
         }
         $newString = "";
@@ -179,6 +179,7 @@ class Dm extends Query
             return "`{$item}`.";
         }, $alias_values), $condition);
         $condition = str_ireplace('=`', ' = `', $condition);
+        $this->options['alias'] = $alias;
         $this->options['join'][] = [$table, strtoupper($type), $condition];
 
         return $this;
