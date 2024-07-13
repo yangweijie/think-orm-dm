@@ -29,25 +29,118 @@ class Dm extends Builder
     }
 
     /**
-     * 字段和表名处理.
-     *
-     * @param Query $query  查询对象
-     * @param string|int|Raw $key    字段名
-     * @param bool  $strict 严格检测
-     *
+     * having分析
+     * @access protected
+     * @param  Query  $query  查询对象
+     * @param  string $having
      * @return string
      */
-    public function parseKey(Query $query, string|int|Raw $key, bool $strict = false): string
+    protected function parseHaving(Query $query, string $having): string
+    {
+        if($having instanceof Raw){
+            return $this->parseRaw($query, $having);
+        }
+        return !empty($having) ? ' HAVING ' . $this->parseKey($query, $having) : '';
+    }
+
+
+    /**
+     * where分析
+     * @access protected
+     * @param  Query $query   查询对象
+     * @param  mixed $where   查询条件
+     * @return string
+     */
+    protected function parseWhere(Query $query, array $where): string
+    {
+        $options  = $query->getOptions();
+        $whereStr = $this->buildWhere($query, $where);
+        // 子查询字段
+        if(strpos($whereStr, '.') !== false){
+            list($tableAlias, $field) = explode('.', $whereStr, 2);
+            $whereStr = DmQuery::quoteFields($whereStr, [trim($tableAlias)]);
+        }
+        if (!empty($options['soft_delete'])) {
+            // 附加软删除条件
+            [$field, $condition] = $options['soft_delete'];
+
+            $binds    = $query->getFieldsBindType();
+            $whereStr = $whereStr ? '( ' . $whereStr . ' ) AND ' : '';
+            $whereStr = $whereStr . $this->parseWhereItem($query, $field, $condition, $binds);
+        }
+
+        return empty($whereStr) ? '' : ' WHERE ' . $whereStr;
+    }
+
+    /**
+     * field分析
+     * @access protected
+     * @param  Query     $query     查询对象
+     * @param  mixed     $fields    字段名
+     * @return string
+     */
+    protected function parseField(Query $query, $fields): string
+    {
+        if (is_array($fields) && $fields) {
+            // 支持 'field1'=>'field2' 这样的字段别名定义
+            $array = [];
+            $tableName = $query->getTable();
+            $tableFields = $query->getTableFields($tableName);
+            foreach ($fields as $key => $field) {
+                if ($field instanceof Raw) {
+                    $sql = $field->getValue();
+                    $bind = $field->getBind();
+                    $sql = str_ireplace('as ', 'AS ', $sql);
+                    if(stripos($sql, 'AS') !== false){
+                        $as_str = rtrim(strstr($sql, 'AS '));
+                        list($as, $alias) = explode('AS ', $as_str);
+                        $as = explode('AS ', $sql)[0];
+                        // 支持-> json字段查询
+                        if(strpos($sql, '->') !== false){
+                            $newAs = DmQuery::parseJson($as, $tableFields);
+                            $sql = str_ireplace(trim($as), $newAs, $sql);
+                        }
+                        $field = new Raw(str_ireplace($alias, "`{$alias}`", $sql), $bind);
+                    }else{
+                        if(strpos($sql, '->') !== false){
+                            $sql = DmQuery::parseJson($sql, $tableFields);
+                            $field = new Raw($sql, $bind);
+                        }
+                    }
+                    $array[] = $this->parseRaw($query, $field);
+                } elseif (!is_numeric($key)) {
+                    $array[] = $this->parseKey($query, $key) . ' AS ' . $this->parseKey($query, $field, true);
+                } else {
+                    $array[] = $this->parseKey($query, $field);
+                }
+            }
+
+            $fieldsStr = implode(',', $array);
+        } else {
+            $fieldsStr = '*';
+        }
+        return $fieldsStr;
+    }
+
+    /**
+     * 字段和表名处理
+     * @access public
+     * @param  Query      $query        查询对象
+     * @param  string     $key
+     * @param  bool     $strict
+     * @return string
+     */
+    public function parseKey(Query $query, $key, bool $strict = false) :string
     {
         if (is_int($key)) {
-            return (string) $key;
+            return $key;
         } elseif ($key instanceof Raw) {
-            return $this->parseRaw($query, $key);
+            return $key->getValue();
         }
 
         $key = trim($key);
 
-        if (str_contains($key, '.')) {
+        if (strpos($key, '.')) {
             [$table, $key] = explode('.', $key, 2);
 
             $alias = $query->getOptions('alias');
@@ -60,20 +153,19 @@ class Dm extends Builder
             if (isset($alias[$table])) {
                 $table = $alias[$table];
             }
+        }
 
-            if ('*' != $key) {
-                $key = str_replace('`', '', $key);
-                if(!preg_match('/[,\'\"\*\(\).\s]/', $key)){
-                    $key = '"' . $key . '"';
-                }else{
-                    $tableName = $query->getTable();
-                    $tableFields = $query->getConnection()->getTableFields($tableName);
-                    if(!is_array($tableFields)){
-                        $tableFields = implode(' ', $tableFields);
-                    }
-                    $key = DmQuery::quoteFields($key, $tableFields);
-
+        $key = str_replace('`', '', $key);
+        if('*' != $key){
+            if(!preg_match('/[,\'\"\*\(\).\s]/', $key)){
+                $key = "`{$key}`";
+            }else{
+                $tableName = $query->getTable();
+                $tableFields = $query->getConnection()->getTableFields($tableName);
+                if(!is_array($tableFields)){
+                    $tableFields = implode(' ', $tableFields);
                 }
+                $key = DmQuery::quoteFields($key, $tableFields);
             }
         }
 
