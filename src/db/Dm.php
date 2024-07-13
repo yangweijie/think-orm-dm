@@ -43,6 +43,47 @@ class Dm extends Query
         return sprintf($express, $field, $jsonPath);
     }
 
+
+    /**
+     * 指定查询字段.
+     *
+     * @param string|array|Raw|true $field 字段信息
+     *
+     * @return $this
+     */
+    public function field(string|array|Raw|bool $field)
+    {
+        if (empty($field)) {
+            return $this;
+        } elseif ($field instanceof Raw) {
+            $this->options['field'][] = $field;
+
+            return $this;
+        }
+
+        if (is_string($field)) {
+            if (preg_match('/[\<\'\"]/', $field)) {
+                return $this->fieldRaw($field);
+            }
+
+            $field = array_map('trim', explode(',', $field));
+        }
+
+        if (true === $field) {
+            // 获取全部字段
+            $fields = $this->getTableFields();
+            $field  = $fields ?: ['*'];
+        }
+
+        if (isset($this->options['field'])) {
+            $field = array_merge((array) $this->options['field'], $field);
+        }
+
+        $this->options['field'] = array_unique($field, SORT_REGULAR);
+
+        return $this;
+    }
+
     /**
      * 将sql中的数据库字段加``
      * @param string $sql
