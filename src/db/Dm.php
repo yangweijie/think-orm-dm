@@ -12,7 +12,7 @@ class Dm extends Query
     {
         $database = $connection->getConfig('database.connections.dm.database');
         if(strpos($name, '.') === false){
-            return "`{$database}`.`{$name}`";
+            return "\"{$database}\".\"{$name}\"";
         }
         return $name;
     }
@@ -51,12 +51,12 @@ class Dm extends Query
      */
     public static function quoteFields(string $sql, array $fields) :string
     {
-        if(strpos($sql, '`') !== false){
+        if(strpos($sql, '"') !== false){
             return $sql;
         }
         $newString = "";
         foreach ($fields as $field) {
-            $replace = preg_quote("`{$field}`", '/');
+            $replace = preg_quote("\"{$field}\"", '/');
             // 使用 preg_replace_callback 函数，将字符串中匹配到的单词替换为对应的替换词
             $newString = preg_replace_callback("/\b{$field}\b/", function ($matches) use ($replace) {
                 return $replace;
@@ -105,7 +105,7 @@ class Dm extends Query
      * @param array|string|Raw $join  JION表名
      * @param string           $alias 别名
      */
-    protected function getJoinTable($join, &$alias = null)
+    protected function getJoinTable(array|string|Raw $join, &$alias = null)
     {
         $database = $this->getDatabase();
         if (is_array($join)) {
@@ -138,7 +138,7 @@ class Dm extends Query
             }
         }
         if(strpos('.', $table) === false){
-            $table = "`{$database}`.{$table}";
+            $table = "\"{$database}\".{$table}";
         }
         if (!empty($alias) && $table != $alias) {
             $table = [$table => $alias];
@@ -149,13 +149,13 @@ class Dm extends Query
     /**
      * 查询SQL组装 join
      * @access public
-     * @param mixed  $join      关联的表名
+     * @param array|string|Raw  $join      关联的表名
      * @param mixed  $condition 条件
      * @param string $type      JOIN类型
      * @param array  $bind      参数绑定
      * @return $this
      */
-    public function join($join, string $condition = null, string $type = 'INNER', array $bind = [])
+    public function join(array|string|Raw $join, string $condition = null, string $type = 'INNER', array $bind = [])
     {
         $table = $this->getJoinTable($join);
         $alias = $this->getOptions('alias')?:[];
@@ -173,9 +173,9 @@ class Dm extends Query
         $condition = str_ireplace(array_map(function($item){
             return "{$item}.";
         }, $alias_values), array_map(function($item){
-            return "`{$item}`.";
+            return "\"{$item}\".";
         }, $alias_values), $condition);
-        $condition = str_ireplace('=`', ' = `', $condition);
+        $condition = str_ireplace('="', ' = "', $condition);
         $this->options['join'][] = [$table, strtoupper($type), $condition];
 
         return $this;

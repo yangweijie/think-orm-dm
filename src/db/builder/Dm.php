@@ -100,7 +100,7 @@ class Dm extends Builder
                             $newAs = DmQuery::parseJson($as, $tableFields);
                             $sql = str_ireplace(trim($as), $newAs, $sql);
                         }
-                        $field = new Raw(str_ireplace($alias, "`{$alias}`", $sql), $bind);
+                        $field = new Raw(str_ireplace($alias, "\"{$alias}\"", $sql), $bind);
                     }else{
                         if(strpos($sql, '->') !== false){
                             $sql = DmQuery::parseJson($sql, $tableFields);
@@ -158,7 +158,7 @@ class Dm extends Builder
         $key = str_replace('`', '', $key);
         if('*' != $key){
             if(!preg_match('/[,\'\"\*\(\).\s]/', $key)){
-                $key = "`{$key}`";
+                $key = "\"{$key}\"";
             }else{
                 $tableName = $query->getTable();
                 $tableFields = $query->getConnection()->getTableFields($tableName);
@@ -258,7 +258,7 @@ class Dm extends Builder
         if(!is_array($tableFields)){
             $tableFields = implode(' ', $tableFields);
         }
-        if(stripos($sql, '`') === false){
+        if(stripos($sql, '"') === false){
             $sql = DmQuery::quoteFields($sql, $tableFields);
         }
 
@@ -291,7 +291,7 @@ class Dm extends Builder
                 $alias = DmQuery::parseAliasFromTable($old_table);
                 $table = $old_table = Db::raw(str_ireplace(' '.$alias, ' '.$this->parseKey($query, $alias), $old_table));
             }
-            $table = $table instanceof Raw? $table: ($is_alias? $table: "`{$database}`.".$table);
+            $table = $table instanceof Raw? $table: ($is_alias? $table: "\"{$database}\".".$table);
             if ($old_table instanceof Raw) {
                 $item[] = $this->parseRaw($query, $table);
             } elseif (!is_numeric($key)) {
