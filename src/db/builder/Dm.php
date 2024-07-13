@@ -87,7 +87,7 @@ class Dm extends Builder
         $options  = $query->getOptions();
         $whereStr = $this->buildWhere($query, $where);
         // 子查询字段
-        if(strpos($whereStr, '.') !== false && strpos($whereStr, ')' === false)){
+        if(strpos($whereStr, '.') !== false && strpos($whereStr, ')') === false){
             [$tableAlias, $field] = explode('.', $whereStr, 2);
             $whereStr = DmQuery::quoteFields($whereStr, [trim($tableAlias)]);
         }
