@@ -85,38 +85,55 @@ class Dm extends PDOConnection
     }
 
     /**
-     * 取得数据表的字段信息.
-     *
+     * 取得数据表的字段信息
+     * @access public
      * @param string $tableName
-     *
      * @return array
      */
     public function getFields(string $tableName): array
     {
         [$tableName] = explode(' ', $tableName);
-
-        $sql = "select * from user_tab_columns where table_name='{$tableName}'";
+        // 分割模式名、表名
+        $originTable = explode('.', $tableName);
+        $schemaName = strtoupper($originTable[0]); // 模式名
+        $tableName = strtoupper($originTable[1]);  // 表名
+        // 查询字段信息
+        $sql = "SELECT B.COLUMN_NAME, B.DATA_TYPE, B.NULLABLE, A.COMMENTS, B.DATA_DEFAULT FROM \"all_col_comments\" A LEFT JOIN \"all_tab_columns\" B
+        ON A.OWNER = B.OWNER AND A.TABLE_NAME = B.TABLE_NAME AND A.COLUMN_NAME = B.COLUMN_NAME
+        WHERE A.TABLE_NAME = '{$tableName}' AND A.OWNER = '{$schemaName}'";
         $pdo = $this->query($sql, [], true);
-        $sql2 = "select a.name COL_NAME from  SYS.SYSCOLUMNS a,all_tables b,sys.sysobjects c where a.INFO2 & 0x01 = 0x01
-and a.id=c.id and c.name= b.table_name and b.TABLE_NAME = '{$tableName}'";
-        $table_auoinc_fields = array_column($this->query($sql2, [], true), 'COL_NAME');
         $result = $pdo;
-        $info   = [];
 
+        // 查询主键字段
+        $primaryKeySql = "SELECT COLUMN_NAME
+        FROM \"all_cons_columns\"
+        WHERE CONSTRAINT_NAME IN (
+            SELECT CONSTRAINT_NAME
+            FROM \"all_constraints\"
+            WHERE TABLE_NAME = '{$tableName}' AND OWNER = '{$schemaName}' AND CONSTRAINT_TYPE = 'P'
+        )";
+        $primaryKeys = array_column($this->query($primaryKeySql, [], true), 'COLUMN_NAME');
+        // 查询自增字段（假设自增字段通过 DATA_DEFAULT 判断）
+        $autoincFields = [];
+        foreach ($result as $row) {
+            if (isset($row['DATA_DEFAULT']) && strpos($row['DATA_DEFAULT'], 'NEXTVAL') !== false) {
+                $autoincFields[] = $row['COLUMN_NAME'];
+            }
+        }
+        $info = [];
         if (!empty($result)) {
             foreach ($result as $key => $val) {
                 $val = array_change_key_case($val);
                 $info[$val['column_name']] = [
                     'name'    => $val['column_name'],
                     'type'    => $val['data_type'],
-                    'notnull' => (bool) 'Y' === $val['nullable'],
-                    'default' => $val['data_default'],
-                    'primary' => $val['column_id'] === 1,
-                    'autoinc' => in_array($val['column_name'], $table_auoinc_fields),
+                    'notnull' => (bool) ('Y' === ($val['nullable'] ?? 'N')), // 处理 nullable 字段
+                    'default' => $val['data_default'] ?? null, // 处理 DATA_DEFAULT 字段
+                    'primary' => in_array($val['column_name'], $primaryKeys),
+                    'autoinc' => in_array($val['column_name'], $autoincFields),
                 ];
             }
         }
-
         return $this->fieldCase($info);
     }
 
